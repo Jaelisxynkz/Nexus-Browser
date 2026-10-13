@@ -1,0 +1,50 @@
+{
+  "name": "Download",
+  "type": "object",
+  "properties": {
+    "filename": {
+      "type": "string"
+    },
+    "url": {
+      "type": "string"
+    },
+    "size": {
+      "type": "number"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "completed",
+        "failed",
+        "paused",
+        "cancelled"
+      ],
+      "default": "active"
+    },
+    "receivedBytes": {
+      "type": "number",
+      "default": 0
+    },
+    "fileUri": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "filename"
+  ],
+  "rls": {
+    "read": {
+      "created_by_id": "{{user.id}}"
+    },
+    "create": {
+      "created_by_id": "{{user.id}}"
+    },
+    "update": {
+      "created_by_id": "{{user.id}}"
+    },
+    "delete": {
+      "created_by_id": "{{user.id}}"
+    }
+  }
+}

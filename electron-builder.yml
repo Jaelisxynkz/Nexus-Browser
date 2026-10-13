@@ -1,0 +1,99 @@
+# electron-builder configuration for Nexus Browser.
+# Build: npx electron-builder --win --x64
+# This produces the NSIS installer + latest.yml (update metadata).
+
+appId: com.nexus.browser
+productName: Nexus
+copyright: Copyright © 2026 Nexus
+
+directories:
+  output: dist-electron
+  buildResources: desktop/build
+
+# The renderer (web app) is loaded from the published URL in production.
+# In development, DEV_SERVER_URL points to the Vite dev server.
+# For a fully offline desktop build, bundle the Vite build output and
+# set loadURL to the local file.
+files:
+  - desktop/**/*
+  - node_modules/**/*
+  - "!node_modules/**/{CHANGELOG.md,README.md,readme.md,*.d.ts,*.map,*.ts}"
+  - "!node_modules/**/{test,tests,__tests__,docs,doc,examples,example}/**"
+  - "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}"
+  - "!.{idea,git,cache,vscode,node_modules}/**"
+
+# Windows NSIS installer configuration.
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: desktop/build/icon.ico
+  # Code signing: set these via environment variables in CI.
+  # CSC_LINK = path to .pfx or base64-encoded cert
+  # CSC_KEY_PASSWORD = cert password
+  # Leave unset for unsigned builds (honest: we report signing as not enforced).
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  allowElevation: true
+  installerIcon: desktop/build/icon.ico
+  uninstallerIcon: desktop/build/icon.ico
+  installerHeaderIcon: desktop/build/icon.ico
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Nexus
+  deleteAppDataOnUninstall: false
+
+# macOS DMG + ZIP configuration.
+# DMG is the user-facing installer; ZIP is required for electron-updater
+# (macOS auto-update downloads the zip, not the dmg).
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
+  icon: desktop/build/icon.icns
+  category: public.app-category.utilities
+  # Code signing + notarization: set these via environment variables in CI.
+  # CSC_LINK (cert), CSC_KEY_PASSWORD, APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD,
+  # APPLE_TEAM_ID. Leave unset for unsigned builds (Gatekeeper will warn).
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  darkModeSupport: true
+
+dmg:
+  contents:
+    - x: 130
+      "y": 220
+    - x: 410
+      "y": 220
+      type: link
+      path: /Applications
+
+# Auto-update: publish to GitHub Releases.
+# electron-updater reads app-update.yml (generated from this config) to find updates.
+publish:
+  provider: github
+  owner: Jaelisxynkz
+  repo: Nexus-Browser
+  # GITHUB_TOKEN is set via environment variable in CI — never committed.
+
+# Generate update metadata (latest.yml) for electron-updater.
+generateUpdatesFilesForAllChannels: true
+
+# Compression.
+compression: maximum
+
+# After-pack hook: ensure the icon and assets are in place.
+# afterPack: desktop/build/after-pack.js
+
+# Electron version — let electron-builder auto-detect from devDependencies.
+# electronVersion: 28.0.0

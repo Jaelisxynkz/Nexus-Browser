@@ -1,0 +1,125 @@
+# Copy this file to .github/workflows/release.yml to enable the release pipeline.
+# GitHub Actions workflows cannot be managed from the Base44 builder — place
+# this in your repository manually.
+#
+# This pipeline builds installers for both Windows and macOS and publishes
+# them to the GitHub Release associated with the pushed version tag (v*).
+# Artifacts: Windows NSIS .exe + latest.yml, macOS .dmg + .zip + latest-mac.yml.
+# The update-metadata files are consumed by electron-updater for auto-update.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (e.g. 1.0.0)'
+        required: false
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: --win --x64
+            artifact_name: Nexus-Windows
+            artifact_glob: |
+              dist-electron/*.exe
+              dist-electron/latest.yml
+          - os: macos-latest
+            target: --mac
+            artifact_name: Nexus-macOS
+            artifact_glob: |
+              dist-electron/*.dmg
+              dist-electron/*.zip
+              dist-electron/latest-mac.yml
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npx vitest run
+
+      - name: Generate desktop icons
+        run: node desktop/build/generate-icon.js
+
+      - name: Build the renderer (web app)
+        run: npm run build
+        env:
+          VITE_APP_VERSION: ${{ github.ref_name }}
+
+      - name: Build desktop installer
+        run: npx electron-builder ${{ matrix.target }} --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Windows code signing (optional):
+          # CSC_LINK: ${{ secrets.CSC_LINK }}
+          # CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          # macOS code signing + notarization (optional):
+          # CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          # CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          # APPLE_ID: ${{ secrets.APPLE_ID }}
+          # APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Upload installer + update metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_glob }}
+          retention-days: 30
+          if-no-files-found: error
+
+  publish:
+    name: Publish to GitHub Releases
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -laR artifacts
+
+      - name: Create release and upload assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          TAG="${GITHUB_REF_NAME}"
+          echo "Publishing release ${TAG}..."
+          # Create the release if it doesn't exist, then upload all assets.
+          gh release create "${TAG}" \
+            --title "Nexus ${TAG}" \
+            --generate-notes \
+            --verify-tag || true
+          gh release upload "${TAG}" artifacts/** --clobber
+          echo "✓ Release ${TAG} published with all platform installers."
